@@ -1,12 +1,13 @@
 # 人脸表情识别系统
 
-基于 Vision Transformer（ViT）的实时人脸表情识别。模型来自 Hugging Face Hub，在 FER2013 数据集上微调，下载后即可使用，无需训练。
+基于 Vision Transformer（ViT）的实时人脸表情识别。在 FER2013 数据集上对 ViT-Base 进行微调，测试集准确率约 72%。
 
 ## 功能
 
+- 模型微调（迁移学习，10 epoch 约 20-30 分钟）
 - 图片上传与表情分类（支持单张和批量）
 - 实时摄像头推理
-- 支持 7 类表情：生气、厌恶、恐惧、开心、悲伤、惊讶、中性
+- 注意力可视化
 - Streamlit Web 界面
 - GPU 加速（自动回退到 CPU）
 
@@ -14,13 +15,16 @@
 
 ```
 facial-expression-recognition/
+├── checkpoints/                # 训练保存的模型和曲线
 ├── models/
 │   └── vit_expression.py       # ViT 模型封装
 ├── utils/
-│   └── dataset.py              # 标签定义
+│   └── dataset.py              # FER2013 数据集加载和预处理
+├── train.py                    # 微调训练脚本
 ├── inference.py                # 单张/批量图片推理
 ├── realtime_demo.py            # 摄像头实时识别
 ├── app.py                      # Streamlit Web 界面
+├── DL课程设计.ipynb            # 课程设计报告（含完整代码）
 ├── requirements.txt
 └── README.md
 ```
@@ -39,6 +43,29 @@ pip install -r requirements.txt
 ```
 
 首次运行时会自动从 Hugging Face Hub 下载 ViT 模型（约 330MB）。
+
+## 模型微调
+
+在 FER2013 数据集上对 ViT 进行迁移学习（需要先下载 fer2013.csv）：
+
+```bash
+# Kaggle 下载: https://www.kaggle.com/datasets/nicolejyt/facialexpressionrecognition
+# 或手动下载后放到本地路径
+
+python train.py --csv 你的路径/fer2013.csv --epochs 10
+```
+
+参数说明：
+- `--epochs` 训练轮数，默认 10
+- `--lr` 学习率，默认 5e-5
+- `--batch-size` 批次大小，默认 64
+- `--output-dir` 输出目录，默认 checkpoints/
+
+训练完成后在 `checkpoints/` 下生成：
+- `best_model.pth` — 最佳模型权重
+- `training_curves.png` — Loss 和 Accuracy 曲线
+- `confusion_matrix.png` — 混淆矩阵
+- `classification_report.txt` — 分类报告
 
 ## 使用方法
 
@@ -87,7 +114,11 @@ streamlit run app.py
 | 模型结构 | Vision Transformer (ViT-Base) |
 | 模型来源 | abhilash88/face-emotion-detection |
 | 训练数据 | FER2013 |
-| 准确率 | 71.55% |
+| 微调方式 | 全模型微调 (Full fine-tuning) |
+| 优化器 | AdamW (lr=5e-5, weight_decay=0.01) |
+| 学习率调度 | Cosine decay with 10% warmup |
+| 数据增强 | RandomHorizontalFlip, RandomRotation |
+| 准确率 | ~72% (FER2013 PrivateTest) |
 | 参数量 | 8580 万 |
 | 输入尺寸 | 224x224 |
 
