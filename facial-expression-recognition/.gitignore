@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Model cache (Hugging Face)
+.cache/
+~/.cache/huggingface/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Screenshots from realtime demo
+screenshot_*.jpg
+
+# Streamlit
+.streamlit/
+
+# PyTorch
+*.pt
+*.pth
+!*.py
+
+# Logs
+*.log
