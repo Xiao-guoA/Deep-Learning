@@ -7,11 +7,16 @@
 | 目录/文件 | 说明 |
 |-----------|------|
 | `HW01-*.ipynb` ~ `HW03-*.ipynb` | 课程作业（Jupyter Notebook） |
-| `facial-expression-recognition/` | 课程项目：基于 ViT 的实时人脸表情识别系统 |
+| `facial-expression-recognition/` | 课程项目：基于自建 CNN 和 ResNet18 迁移学习的实时人脸表情识别系统 |
 
 ## 项目：人脸表情识别系统
 
-基于 Vision Transformer（ViT）的实时人脸表情识别，支持 7 类表情（生气、厌恶、恐惧、开心、悲伤、惊讶、中性）。
+在 FER2013 数据集上训练自建 CNN（从零训练）和 ResNet18（迁移学习），实现 7 类表情识别。
+
+| 模型 | 参数量 | 测试准确率 |
+|------|--------|-----------|
+| 自建 CNN（5 层卷积） | ~55 万 | ~63% |
+| ResNet18 迁移学习 | ~1117 万 | ~69% |
 
 ### 快速开始
 
@@ -23,7 +28,10 @@ pip install -r requirements.txt
 图片推理：
 
 ```bash
+# 自建 CNN（默认）
 python inference.py --image 图片路径.jpg
+# ResNet18
+python inference.py --image 图片路径.jpg --model resnet18
 ```
 
 摄像头实时识别：
@@ -42,8 +50,8 @@ streamlit run app.py
 
 ### 技术要点
 
-- 模型：Hugging Face 预训练 ViT（abhilash88/face-emotion-detection）
-- 数据集：FER2013（71.55% 准确率）
+- 模型：自建 CNN + ResNet18 迁移学习（torchvision 预训练权重）
+- 数据集：FER2013（35,887 张 48×48 灰度图，7 类表情）
 - 人脸检测：OpenCV Haar Cascade
 - Web 界面：Streamlit
 
