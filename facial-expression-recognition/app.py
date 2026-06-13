@@ -1,7 +1,8 @@
 """
-Streamlit web application for facial expression recognition.
+Streamlit Web 界面 - 人脸表情识别
 
-Run with: streamlit run app.py
+用法:
+    streamlit run app.py
 """
 
 import os
@@ -10,13 +11,19 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+from torchvision import transforms
 import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from models.cnn_baseline import CNNBaseline
+from models.resnet_expression import ResNetExpression
 
-from inference import load_model, vit_preprocess, predict
+# 标签映射
+EMOTION_LABELS = {
+    0: 'Angry', 1: 'Disgust', 2: 'Fear', 3: 'Happy',
+    4: 'Sad', 5: 'Surprise', 6: 'Neutral',
+}
 
-# Emotion to emoji mapping for display
 EMOTION_EMOJIS = {
     'Angry':    '\U0001F620',
     'Disgust':  '\U0001F922',
@@ -37,68 +44,105 @@ EMOTION_COLORS = {
     'Neutral':  '#AAAAAA',
 }
 
+NORMALIZE = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225],
+)
+
 
 @st.cache_resource
-def load_model_cached():
+def load_model_cached(model_type='cnn'):
+    """缓存模型加载"""
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    return load_model(device)
+
+    if model_type == 'cnn':
+        model = CNNBaseline(num_classes=7)
+        checkpoint_path = 'checkpoints/cnn/best_model.pth'
+        size = 48
+    else:
+        model = ResNetExpression(num_classes=7, finetune_all=True)
+        checkpoint_path = 'checkpoints/resnet18/best_model.pth'
+        size = 224
+
+    if os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        if 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
+
+    model = model.to(device)
+    model.eval()
+
+    transform = transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor(),
+        NORMALIZE,
+    ])
+
+    return model, transform, device
 
 
 def main():
     st.set_page_config(
-        page_title='Facial Expression Recognition',
+        page_title='人脸表情识别',
         page_icon='\U0001F604',
         layout='wide',
     )
 
     st.markdown("""
     <h1 style='text-align: center; margin-bottom: 0;'>
-        Facial Expression Recognition
+        人脸表情识别系统
     </h1>
     <p style='text-align: center; color: gray; margin-top: 0;'>
-        Vision Transformer fine-tuned on FER2013
+        自建 CNN / ResNet18 迁移学习 · FER2013 数据集
     </p>
     <hr>
     """, unsafe_allow_html=True)
 
+    # 侧边栏
     with st.sidebar:
-        st.header("About")
-        st.markdown("""
-        This application uses a Vision Transformer (ViT) model
-        pre-trained on ImageNet and fine-tuned on the FER2013 dataset.
+        st.header("模型设置")
+        model_type = st.radio(
+            "选择模型",
+            options=['cnn', 'resnet18'],
+            format_func=lambda x: '自建 CNN（48x48）' if x == 'cnn' else 'ResNet18 迁移学习（224x224）',
+            index=0,
+        )
 
-        **Recognized expressions:**
+        st.markdown("---")
+        st.header("关于")
+        st.markdown(f"""
+        使用 **{ '自建 CNN' if model_type == 'cnn' else 'ResNet18' }** 进行人脸表情识别。
+
+        **可识别表情:**
         - Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral
 
-        **Model:** abhilash88/face-emotion-detection (71.55% accuracy)
-
-        **Tech stack:** PyTorch, Hugging Face Transformers,
-        OpenCV, Streamlit
+        **技术栈:** PyTorch, OpenCV, Streamlit
         """)
 
         st.markdown("---")
-
         model_loaded = False
         try:
-            model = load_model_cached()
+            model, transform, device = load_model_cached(model_type)
             model_loaded = True
-            st.success("Model loaded")
+            st.success(f"模型已加载 ({device})")
         except Exception as e:
-            st.error(f"Failed to load model: {e}")
+            st.error(f"模型加载失败: {e}")
 
-    tab1, tab2 = st.tabs(["Image Upload", "Camera"])
+    tab1, tab2 = st.tabs(["图片上传", "摄像头"])
 
-    # Tab 1: Image upload
+    # Tab 1: 图片上传
     with tab1:
-        st.header("Upload an image")
+        st.header("上传图片进行识别")
         uploaded = st.file_uploader(
-            "Choose an image file",
+            "选择图片文件",
             type=['jpg', 'jpeg', 'png', 'bmp'],
         )
 
-        use_camera_input = st.checkbox("Take a photo instead", value=False)
+        use_camera_input = st.checkbox("改为拍照", value=False)
         if use_camera_input:
-            camera_photo = st.camera_input("Take a photo")
+            camera_photo = st.camera_input("拍照")
             if camera_photo:
                 uploaded = camera_photo
 
@@ -109,10 +153,10 @@ def main():
             col1, col2 = st.columns(2)
 
             with col1:
-                st.image(image, caption='Input image', use_container_width=True)
+                st.image(image, caption='输入图片', use_container_width=True)
 
             with col2:
-                with st.spinner('Analyzing...'):
+                with st.spinner('分析中...'):
                     opencv_img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
                     gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
                     face_cascade = cv2.CascadeClassifier(
@@ -126,10 +170,17 @@ def main():
                         face = max(faces, key=lambda f: f[2] * f[3])
                         x, y, w, h = face
                         face_roi = image.crop((x, y, x + w, y + h))
-                        tensor = vit_preprocess(face_roi)
 
-                        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-                        emotion, confidence, probs = predict(model, tensor, device)
+                        # 推理
+                        with torch.no_grad():
+                            tensor = transform(face_roi).unsqueeze(0).to(device)
+                            outputs = model(tensor)
+                            probs = torch.softmax(outputs, dim=1)
+                            confidence, predicted = torch.max(probs, dim=1)
+                            confidence = confidence.item()
+                            predicted = predicted.item()
+                            emotion = EMOTION_LABELS[predicted]
+                            probs_np = probs[0].cpu().numpy()
 
                         emoji = EMOTION_EMOJIS.get(emotion, '')
                         color = EMOTION_COLORS.get(emotion, '#000000')
@@ -139,19 +190,16 @@ def main():
                             f"border-radius: 10px; background-color: {color}22; "
                             f"border: 2px solid {color};'>"
                             f"<h2 style='font-size: 64px; margin: 0;'>{emoji}</h2>"
-                            f"<h2>Result: {emotion}</h2>"
-                            f"<h3 style='color: gray;'>Confidence: "
+                            f"<h2>识别结果: {emotion}</h2>"
+                            f"<h3 style='color: gray;'>置信度: "
                             f"{confidence*100:.1f}%</h3></div>",
                             unsafe_allow_html=True,
                         )
 
-                        # Draw bounding box on the image
-                        result = np.array(image).copy()
-                        cv2.rectangle(result, (x, y), (x + w, y + h),
-                                     tuple(int(color[i:i+2], 16) for i in range(1, 6, 2)), 2)
-
-                        st.subheader("Per-class probabilities")
-                        sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+                        # 各类概率
+                        st.subheader("各类别概率")
+                        probs_dict = {EMOTION_LABELS[i]: float(probs_np[i]) for i in range(7)}
+                        sorted_probs = sorted(probs_dict.items(), key=lambda x: x[1], reverse=True)
                         for emotion_name, prob in sorted_probs:
                             st.markdown(
                                 f"{EMOTION_EMOJIS.get(emotion_name, '')} "
@@ -159,31 +207,27 @@ def main():
                             )
                             st.progress(prob)
                     else:
-                        st.error("No face detected. Try a different image.")
+                        st.error("未检测到人脸，请换一张图片重试。")
 
-    # Tab 2: Camera (simplified - recommends realtime_demo.py)
+    # Tab 2: 摄像头
     with tab2:
-        st.header("Real-time Camera")
+        st.header("实时摄像头识别")
         st.markdown("""
-        For real-time camera inference with better performance,
-        use the dedicated script:
+        如需更好的实时性能，建议使用专用脚本：
 
+        ```bash
+        python realtime_demo.py --model {model_type}
         ```
-        python realtime_demo.py
-        ```
-
-        This Streamlit tab provides a simplified snapshot-based
-        alternative.
         """)
 
-        run_camera = st.checkbox("Enable snapshot mode", value=False)
+        run_camera = st.checkbox("开启快照模式", value=False)
         if run_camera and model_loaded:
-            FRAME_WINDOW = st.image([], caption='Camera', width=640)
+            FRAME_WINDOW = st.image([], caption='摄像头', width=640)
             cap = cv2.VideoCapture(0)
-            stop = st.button("Stop")
+            stop = st.button("停止")
 
             if not cap.isOpened():
-                st.error("Cannot open camera")
+                st.error("无法打开摄像头")
             else:
                 while True:
                     ret, frame = cap.read()
@@ -202,9 +246,13 @@ def main():
                         face_roi = frame[y:y+h, x:x+w]
                         face_pil = Image.fromarray(cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB))
                         try:
-                            tensor = vit_preprocess(face_pil)
-                            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-                            emotion, confidence, _ = predict(model, tensor, device)
+                            tensor = transform(face_pil).unsqueeze(0).to(device)
+                            with torch.no_grad():
+                                outputs = model(tensor)
+                                probs = torch.softmax(outputs, dim=1)
+                                confidence, predicted = torch.max(probs, dim=1)
+                                emotion = EMOTION_LABELS[predicted.item()]
+
                             color = EMOTION_COLORS.get(emotion, (0, 255, 0))
                             if isinstance(color, str):
                                 color = tuple(int(color[i:i+2], 16) for i in range(1, 6, 2))
