@@ -6,7 +6,7 @@
 
 | 目录/文件 | 说明 |
 |-----------|------|
-| `HW01-*.ipynb` ~ `HW03-*.ipynb` | 课程作业（Jupyter Notebook） |
+| `HW01-*.ipynb` ~ `HW04-*.ipynb` | 课程作业（Jupyter Notebook） |
 | `facial-expression-recognition/` | 课程项目：基于自建 CNN 和 ResNet18 迁移学习的实时人脸表情识别系统 |
 
 ## 项目：人脸表情识别系统
